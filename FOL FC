@@ -1,0 +1,85 @@
+def parse_predicate(s):
+    s = s.replace(" ", "")
+    name = s[:s.index("(")]
+    args = s[s.index("(")+1:-1].split(",")
+    return (name, tuple(args))
+
+def same_fact(a, b):
+    return a[0] == b[0] and a[1] == b[1]
+
+def substitute(pred, subst):
+    name, args = pred
+    new_args = []
+    for a in args:
+        new_args.append(subst.get(a, a))
+    return (name, tuple(new_args))
+
+def unify(a, b):
+    if a[0] != b[0] or len(a[1]) != len(b[1]):
+        return None
+    subs = {}
+    for x, y in zip(a[1], b[1]):
+        if x == y:
+            continue
+        if x.islower():
+            subs[x] = y
+        elif y.islower():
+            subs[y] = x
+        else:
+            return None
+    return subs
+
+def forward_chain(facts, rules):
+    inferred = True
+    while inferred:
+        inferred = False
+        for head, body in rules:
+            all_subs = [{}]
+            for b in body:
+                new_subs = []
+                for subs in all_subs:
+                    b_sub = substitute(b, subs)
+                    for f in facts:
+                        u = unify(b_sub, f)
+                        if u is not None:
+                            merged = dict(subs)
+                            merged.update(u)
+                            new_subs.append(merged)
+                all_subs = new_subs
+            for subs in all_subs:
+                new_fact = substitute(head, subs)
+                if not any(same_fact(new_fact, f) for f in facts):
+                    facts.append(new_fact)
+                    inferred = True
+    return facts
+
+facts = [
+    parse_predicate("Parent(John, Mary)"),
+    parse_predicate("Parent(Mary, Sam)"),
+    parse_predicate("Parent(John, Bob)")
+]
+
+rules = [
+    (parse_predicate("Ancestor(x,y)"), [parse_predicate("Parent(x,y)")]),
+    (parse_predicate("Ancestor(x,y)"), [
+        parse_predicate("Parent(x,z)"),
+        parse_predicate("Ancestor(z,y)")
+    ])
+]
+
+all_facts = forward_chain(facts[:], rules)
+
+print("ALL INFERRED FACTS:\n")
+for f in all_facts:
+    print(f"{f[0]}{f[1]}")
+
+def ask(query, facts):
+    q = parse_predicate(query)
+    for f in facts:
+        if unify(q, f) is not None:
+            return True
+    return False
+
+print("\nQUERY RESULT:")
+print("Ancestor(John,Sam)?", ask("Ancestor(John,Sam)", all_facts))
+print("Ancestor(Bob,Sam)?", ask("Ancestor(Bob,Sam)", all_facts))
